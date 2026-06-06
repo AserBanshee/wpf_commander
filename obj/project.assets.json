@@ -14,11 +14,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\WpfCommander\\FileVault.csproj",
-      "projectName": "FileVault",
-      "projectPath": "D:\\WpfCommander\\FileVault.csproj",
+      "projectUniqueName": "D:\\skuriga\\WpfCommander\\WpfCommander.csproj",
+      "projectName": "WpfCommander",
+      "projectPath": "D:\\skuriga\\WpfCommander\\WpfCommander.csproj",
       "packagesPath": "C:\\Users\\User\\.nuget\\packages\\",
-      "outputPath": "D:\\WpfCommander\\obj\\",
+      "outputPath": "D:\\skuriga\\WpfCommander\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

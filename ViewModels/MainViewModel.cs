@@ -1,153 +1,184 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
-using FileVault.Commands;
-using FileVault.Services;
+using WpfCommander.Commands;
+using WpfCommander.Models;
+using WpfCommander.Services;
+using WpfCommander.Views;
 
-namespace FileVault.ViewModels;
-
-// Координирует две панели и файловые операции
-public class MainViewModel : ViewModelBase
+namespace WpfCommander.ViewModels
 {
-    private readonly DiskService _disk = new();
-
-    public ExplorerPaneVM LeftPane { get; }
-    public ExplorerPaneVM RightPane { get; }
-
-    // Активная и пассивная панели
-    private ExplorerPaneVM Active => LeftPane.IsActive ? LeftPane : RightPane;
-    private ExplorerPaneVM Passive => LeftPane.IsActive ? RightPane : LeftPane;
-
-    public ICommand CopyCommand { get; }
-    public ICommand MoveCommand { get; }
-    public ICommand NewFolderCommand { get; }
-    public ICommand DeleteCommand { get; }
-    public ICommand ActivateLeftCommand { get; }
-    public ICommand ActivateRightCommand { get; }
-
-    public MainViewModel()
+    public class MainViewModel : ViewModelBase
     {
-        LeftPane = new ExplorerPaneVM(_disk) { IsActive = true };
-        RightPane = new ExplorerPaneVM(_disk) { IsActive = false };
+        private readonly FileManagerService _service = new();
 
-        // Правая панель открывает второй диск если есть
-        if (RightPane.Drives.Count > 1)
-            RightPane.NavigateTo(RightPane.Drives[1]);
-
-        CopyCommand      = new RelayCommand(_ => ExecuteCopy());
-        MoveCommand      = new RelayCommand(_ => ExecuteMove());
-        NewFolderCommand = new RelayCommand(_ => ExecuteNewFolder());
-        DeleteCommand    = new RelayCommand(_ => ExecuteDelete());
-        ActivateLeftCommand  = new RelayCommand(_ => SetActive(LeftPane));
-        ActivateRightCommand = new RelayCommand(_ => SetActive(RightPane));
-    }
-
-    public void SetActive(ExplorerPaneVM pane)
-    {
-        LeftPane.IsActive  = pane == LeftPane;
-        RightPane.IsActive = pane == RightPane;
-    }
-
-    // F5 — копирование
-    private void ExecuteCopy()
-    {
-        var items = Active.GetSelected();
-        if (items.Count == 0) { Warn("Выберите файл или папку."); return; }
-
-        var dest = Passive.CurrentPath;
-        var errors = new List<string>();
-
-        foreach (var item in items)
+        public MainViewModel()
         {
-            try { _disk.Copy(item.FullPath, dest); }
-            catch (IOException ex) { errors.Add($"{item.Name}: {ex.Message}"); }
-            catch (UnauthorizedAccessException) { errors.Add($"{item.Name}: отказано в доступе"); }
-            catch (Exception ex) { errors.Add($"{item.Name}: {ex.Message}"); }
+            LeftPanel = new PanelViewModel(_service);
+            RightPanel = new PanelViewModel(_service);
+
+            LeftPanel.IsActive = true;
+            ActivePanel = LeftPanel;
+            PassivePanel = RightPanel;
+
+            CopyCommand      = new RelayCommand(CopySelected,    HasSelectionAndPassive);
+            MoveCommand      = new RelayCommand(MoveSelected,    HasSelectionAndPassive);
+            DeleteCommand    = new RelayCommand(DeleteSelected,  HasSelection);
+            NewFolderCommand = new RelayCommand(CreateNewFolder, HasActivePath);
         }
 
-        Active.Refresh();
-        Passive.Refresh();
-        if (errors.Count > 0)
-            MessageBox.Show(string.Join("\n", errors), "Ошибки при копировании",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+        public PanelViewModel LeftPanel { get; }
+        public PanelViewModel RightPanel { get; }
+
+        private PanelViewModel? _activePanel;
+        public PanelViewModel? ActivePanel
+        {
+            get => _activePanel;
+            private set => SetField(ref _activePanel, value);
+        }
+
+        private PanelViewModel? _passivePanel;
+        public PanelViewModel? PassivePanel
+        {
+            get => _passivePanel;
+            private set => SetField(ref _passivePanel, value);
+        }
+
+        public void SetActive(PanelViewModel panel)
+        {
+            if (panel == ActivePanel) return;
+            LeftPanel.IsActive = panel == LeftPanel;
+            RightPanel.IsActive = panel == RightPanel;
+            ActivePanel = panel;
+            PassivePanel = panel == LeftPanel ? RightPanel : LeftPanel;
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        public ICommand CopyCommand      { get; }
+        public ICommand MoveCommand      { get; }
+        public ICommand DeleteCommand    { get; }
+        public ICommand NewFolderCommand { get; }
+
+        private bool HasSelectionAndPassive() => HasSelection() && PassivePanel != null
+            && !string.IsNullOrEmpty(PassivePanel.CurrentPath);
+
+        private bool HasSelection() => GetSelected().Any();
+
+        private bool HasActivePath() =>
+            ActivePanel != null && !string.IsNullOrEmpty(ActivePanel.CurrentPath);
+
+        private IEnumerable<FileSystemItem> GetSelected()
+        {
+            if (ActivePanel == null) return Array.Empty<FileSystemItem>();
+
+            var source = ActivePanel.SelectedItems?.ToList() ?? new List<FileSystemItem>();
+            if (source.Count == 0 && ActivePanel.SelectedItem != null)
+                source.Add(ActivePanel.SelectedItem);
+            return source.Where(s => !s.IsParentEntry);
+        }
+
+        private void CopySelected()
+        {
+            var items = GetSelected().ToList();
+            if (items.Count == 0 || PassivePanel == null) return;
+
+            int ok = 0;
+            foreach (var item in items)
+            {
+                if (TryRun(() => _service.Copy(item, PassivePanel.CurrentPath), item.Name))
+                    ok++;
+            }
+            PassivePanel.Refresh();
+            if (ActivePanel != null)
+                ActivePanel.StatusMessage = $"Скопировано: {ok} из {items.Count}";
+        }
+
+        private void MoveSelected()
+        {
+            var items = GetSelected().ToList();
+            if (items.Count == 0 || PassivePanel == null || ActivePanel == null) return;
+
+            int ok = 0;
+            foreach (var item in items)
+            {
+                if (TryRun(() => _service.Move(item, PassivePanel.CurrentPath), item.Name))
+                    ok++;
+            }
+            ActivePanel.Refresh();
+            PassivePanel.Refresh();
+            ActivePanel.StatusMessage = $"Перемещено: {ok} из {items.Count}";
+        }
+
+        private void DeleteSelected()
+        {
+            var items = GetSelected().ToList();
+            if (items.Count == 0 || ActivePanel == null) return;
+
+            var msg = items.Count == 1
+                ? $"Удалить '{items[0].Name}'?"
+                : $"Удалить {items.Count} элементов?";
+
+            var answer = MessageBox.Show(msg, "Подтверждение удаления",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            if (answer != MessageBoxResult.Yes) return;
+
+            int ok = 0;
+            foreach (var item in items)
+            {
+                if (TryRun(() => _service.Delete(item), item.Name))
+                    ok++;
+            }
+            ActivePanel.Refresh();
+            ActivePanel.StatusMessage = $"Удалено: {ok} из {items.Count}";
+        }
+
+        private void CreateNewFolder()
+        {
+            if (ActivePanel == null || string.IsNullOrEmpty(ActivePanel.CurrentPath)) return;
+
+            var dlg = new InputDialog("Новая папка", "Введите имя папки:", "Новая папка")
+            {
+                Owner = Application.Current.MainWindow
+            };
+            if (dlg.ShowDialog() != true) return;
+
+            if (TryRun(() => _service.CreateFolder(ActivePanel.CurrentPath, dlg.ResponseText),
+                       dlg.ResponseText))
+            {
+                ActivePanel.Refresh();
+                ActivePanel.StatusMessage = $"Создана папка: {dlg.ResponseText}";
+            }
+        }
+
+        private static bool TryRun(Action action, string subject)
+        {
+            try
+            {
+                action();
+                return true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                ShowError("Отказано в доступе", subject);
+            }
+            catch (IOException ex)
+            {
+                ShowError(ex.Message, subject);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex.Message, subject);
+            }
+            return false;
+        }
+
+        private static void ShowError(string message, string subject)
+        {
+            MessageBox.Show($"{subject}\n\n{message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
-
-    // F6 — перемещение
-    private void ExecuteMove()
-    {
-        var items = Active.GetSelected();
-        if (items.Count == 0) { Warn("Выберите файл или папку."); return; }
-
-        var dest = Passive.CurrentPath;
-        var errors = new List<string>();
-
-        foreach (var item in items)
-        {
-            try { _disk.Move(item.FullPath, dest); }
-            catch (IOException ex) { errors.Add($"{item.Name}: {ex.Message}"); }
-            catch (UnauthorizedAccessException) { errors.Add($"{item.Name}: отказано в доступе"); }
-            catch (Exception ex) { errors.Add($"{item.Name}: {ex.Message}"); }
-        }
-
-        Active.Refresh();
-        Passive.Refresh();
-        if (errors.Count > 0)
-            MessageBox.Show(string.Join("\n", errors), "Ошибки при перемещении",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-    }
-
-    // F7 — новая папка
-    private void ExecuteNewFolder()
-    {
-        var dlg = new Views.NamePrompt("Новая папка", "Введите имя папки:");
-        if (dlg.ShowDialog() != true || string.IsNullOrWhiteSpace(dlg.EnteredName))
-            return;
-
-        try
-        {
-            _disk.CreateFolder(Active.CurrentPath, dlg.EnteredName.Trim());
-            Active.Refresh();
-        }
-        catch (IOException ex)
-        {
-            MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(ex.Message, "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    // F8 — удаление
-    private void ExecuteDelete()
-    {
-        var items = Active.GetSelected();
-        if (items.Count == 0) { Warn("Выберите файл или папку."); return; }
-
-        var names = string.Join("\n", items.Select(i => i.Name));
-        var confirm = MessageBox.Show(
-            $"Удалить следующие объекты?\n\n{names}",
-            "Подтверждение удаления",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-
-        if (confirm != MessageBoxResult.Yes) return;
-
-        var errors = new List<string>();
-        foreach (var item in items)
-        {
-            try { _disk.Delete(item.FullPath); }
-            catch (IOException ex) { errors.Add($"{item.Name}: {ex.Message}"); }
-            catch (UnauthorizedAccessException) { errors.Add($"{item.Name}: отказано в доступе"); }
-            catch (Exception ex) { errors.Add($"{item.Name}: {ex.Message}"); }
-        }
-
-        Active.Refresh();
-        if (errors.Count > 0)
-            MessageBox.Show(string.Join("\n", errors), "Ошибки при удалении",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-    }
-
-    private static void Warn(string msg)
-        => MessageBox.Show(msg, "FileVault", MessageBoxButton.OK, MessageBoxImage.Information);
 }

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "dg8l6N+DefY=",
+  "dgSpecHash": "vfSbC3ElfeY=",
   "success": true,
-  "projectFilePath": "D:\\WpfCommander\\FileVault.csproj",
+  "projectFilePath": "D:\\skuriga\\WpfCommander\\WpfCommander.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\User\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.27\\microsoft.netcore.app.ref.8.0.27.nupkg.sha512",
     "C:\\Users\\User\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.27\\microsoft.windowsdesktop.app.ref.8.0.27.nupkg.sha512",
