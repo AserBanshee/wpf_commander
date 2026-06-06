@@ -1,0 +1,89 @@
+<Window x:Class="FileVault.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:FileVault.ViewModels"
+        xmlns:views="clr-namespace:FileVault.Views"
+        Title="FileVault" Height="620" Width="1000"
+        MinHeight="500" MinWidth="800"
+        Background="#11111B"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding CopyCommand}"/>
+        <KeyBinding Key="F6" Command="{Binding MoveCommand}"/>
+        <KeyBinding Key="F7" Command="{Binding NewFolderCommand}"/>
+        <KeyBinding Key="F8" Command="{Binding DeleteCommand}"/>
+    </Window.InputBindings>
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Две панели -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <views:ExplorerPane Grid.Column="0"
+                                DataContext="{Binding LeftPane}"/>
+            <views:ExplorerPane Grid.Column="2"
+                                DataContext="{Binding RightPane}"/>
+        </Grid>
+
+        <!-- Панель кнопок операций -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" Style="{StaticResource OpBtn}"
+                    Command="{Binding CopyCommand}">
+                <StackPanel>
+                    <TextBlock Text="📋  F5 — Копировать"
+                               HorizontalAlignment="Center" FontSize="12"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="2" Style="{StaticResource OpBtn}"
+                    Command="{Binding MoveCommand}">
+                <StackPanel>
+                    <TextBlock Text="✂️  F6 — Переместить"
+                               HorizontalAlignment="Center" FontSize="12"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="4" Style="{StaticResource OpBtn}"
+                    Command="{Binding NewFolderCommand}">
+                <StackPanel>
+                    <TextBlock Text="📁  F7 — Новая папка"
+                               HorizontalAlignment="Center" FontSize="12"/>
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="6" Style="{StaticResource OpBtn}"
+                    Command="{Binding DeleteCommand}">
+                <StackPanel>
+                    <TextBlock Text="🗑  F8 — Удалить"
+                               HorizontalAlignment="Center" FontSize="12"
+                               Foreground="#F38BA8"/>
+                </StackPanel>
+            </Button>
+        </Grid>
+    </Grid>
+</Window>
